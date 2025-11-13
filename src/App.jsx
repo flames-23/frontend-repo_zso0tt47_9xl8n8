@@ -1,7 +1,7 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion } from 'framer-motion'
-import { Github, Linkedin, Mail, ExternalLink, ArrowRight, Sparkles, Award, ShieldCheck, Brain, Code } from 'lucide-react'
+import { Github, Linkedin, Mail, ExternalLink, ArrowRight, Sparkles, Award, ShieldCheck, Brain, Code, CheckCircle2, XCircle } from 'lucide-react'
 
 function GlassCard({ children, className = '' }) {
   return (
@@ -28,24 +28,49 @@ export default function App() {
   const nameRef = useRef(null)
   const emailRef = useRef(null)
   const messageRef = useRef(null)
+  const [status, setStatus] = useState(null) // 'ok' | 'error' | null
+  const [loading, setLoading] = useState(false)
 
-  const handleSend = () => {
-    const name = nameRef.current?.value?.trim() || 'Someone'
-    const email = emailRef.current?.value?.trim() || 'no-email-provided'
-    const msg = messageRef.current?.value?.trim() || ''
+  const handleSend = async () => {
+    const name = nameRef.current?.value?.trim()
+    const email = emailRef.current?.value?.trim()
+    const msg = messageRef.current?.value?.trim()
 
-    const subject = `Collaboration request from ${name}`
-    const bodyLines = [
-      `Name: ${name}`,
-      `Email: ${email}`,
-      '',
-      'Message:',
-      msg,
-    ]
-    const body = bodyLines.join('\n')
+    if (!name || !email || !msg) {
+      setStatus({ type: 'error', message: 'Please fill in your name, email, and message.' })
+      return
+    }
 
-    const mailto = `mailto:shreyash@certiswift.in?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.location.href = mailto
+    setLoading(true)
+    setStatus(null)
+
+    const base = import.meta.env.VITE_BACKEND_URL || ''
+    try {
+      const res = await fetch(`${base}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message: msg }),
+      })
+      const data = await res.json()
+      if (res.ok && data?.ok) {
+        setStatus({ type: 'ok', message: data.email_dispatched ? 'Message sent!' : 'Message saved. Email will be delivered if configured.' })
+        // clear fields
+        if (nameRef.current) nameRef.current.value = ''
+        if (emailRef.current) emailRef.current.value = ''
+        if (messageRef.current) messageRef.current.value = ''
+      } else {
+        throw new Error(data?.error || 'Failed to send')
+      }
+    } catch (e) {
+      // Fallback to mailto so the user can still reach you
+      const subject = `Collaboration request from ${name}`
+      const body = [`Name: ${name}`, `Email: ${email}`, '', 'Message:', msg].join('\n')
+      const mailto = `mailto:shreyash@certiswift.in?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.location.href = mailto
+      setStatus({ type: 'error', message: 'Direct send failed – opening your email client.' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -60,7 +85,7 @@ export default function App() {
             <div className="flex items-center justify-between px-6 py-4">
               <a href="#home" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
                 <Sparkles size={18} className="text-red-300" />
-                <span>Shreyash</span>
+                <span>Shreyash Tailor</span>
               </a>
               <nav className="hidden md:flex items-center gap-6">
                 {navLinks.map((l) => (
@@ -133,12 +158,12 @@ export default function App() {
             <GlassCard className="p-8 md:p-10">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                 <div className="shrink-0 h-20 w-20 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 p-[2px]">
-                  <div className="h-full w-full rounded-2xl bg-black/60 backdrop-blur-xl grid place-items-center text-2xl font-bold">
-                    S
+                  <div className="h-full w-full rounded-2xl bg-black/60 backdrop-blur-xl grid place-items-center text-xl font-bold tracking-tight">
+                    ST
                   </div>
                 </div>
                 <div>
-                  <h2 className="text-2xl md:text-3xl font-bold">Hi, I’m Shreyash</h2>
+                  <h2 className="text-2xl md:text-3xl font-bold">Hi, I’m Shreyash Tailor</h2>
                   <p className="mt-2 text-white/80">
                     Frontend developer passionate about clean design, smooth micro-interactions, and performant web apps. I enjoy turning ideas into delightful digital products.
                   </p>
@@ -265,9 +290,15 @@ export default function App() {
                 <input ref={nameRef} placeholder="Your name" className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 outline-none placeholder:text-white/60" />
                 <input ref={emailRef} placeholder="Email" className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 outline-none placeholder:text-white/60" />
                 <textarea ref={messageRef} rows={4} placeholder="Message" className="sm:col-span-2 rounded-xl border border-white/20 bg-white/10 px-4 py-3 outline-none placeholder:text-white/60" />
-                <button onClick={handleSend} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 px-5 py-3 text-sm font-semibold shadow-lg hover:shadow-xl sm:col-span-2">
-                  Send Message
+                <button disabled={loading} onClick={handleSend} className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold shadow-lg hover:shadow-xl sm:col-span-2 ${loading ? 'opacity-70 cursor-not-allowed bg-gradient-to-r from-neutral-600 to-neutral-700' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
+                  {loading ? 'Sending...' : 'Send Message'}
                 </button>
+                {status?.type && (
+                  <div className={`sm:col-span-2 mt-1 flex items-center gap-2 text-sm ${status.type === 'ok' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {status.type === 'ok' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                    <span>{status.message}</span>
+                  </div>
+                )}
               </div>
             </GlassCard>
 
@@ -296,7 +327,7 @@ export default function App() {
       </section>
 
       <footer className="border-t border-white/10/20 py-8 text-center text-white/60">
-        © {new Date().getFullYear()} Shreyash • Red & Black theme with glassmorphism and 3D
+        © {new Date().getFullYear()} Shreyash Tailor • Red & Black theme with glassmorphism and 3D
       </footer>
     </div>
   )
