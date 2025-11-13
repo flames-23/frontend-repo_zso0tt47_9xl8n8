@@ -1,12 +1,11 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Spline from '@splinetool/react-spline'
 import { motion } from 'framer-motion'
-import { Github, Linkedin, Mail, ExternalLink, ArrowRight, Sparkles, Award, ShieldCheck, Brain, Code, CheckCircle2, XCircle } from 'lucide-react'
+import { Github, Linkedin, Mail, ExternalLink, ArrowRight, Sparkles, Award, ShieldCheck, Brain, Code, CheckCircle2, XCircle, RefreshCw, Info } from 'lucide-react'
 
 function GlassCard({ children, className = '' }) {
   return (
     <div className={`relative rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-xl ${className}`}>
-      {/* frosted highlight */}
       <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-white/15 to-transparent opacity-60" />
       <div className="relative z-10">{children}</div>
     </div>
@@ -25,11 +24,55 @@ export default function App() {
     []
   )
 
+  // Spline scene swapping
+  const defaultScene = 'https://prod.spline.design/41MGRk-UDPKO-l6W/scene.splinecode'
+  const envScene = import.meta.env.VITE_SPLINE_SCENE || ''
+  const [sceneUrl, setSceneUrl] = useState(() => localStorage.getItem('splineScene') || envScene || defaultScene)
+  const [customScene, setCustomScene] = useState('')
+
+  useEffect(() => {
+    // keep localStorage in sync
+    if (sceneUrl) localStorage.setItem('splineScene', sceneUrl)
+  }, [sceneUrl])
+
+  const applyCustomScene = () => {
+    const url = customScene.trim()
+    if (!url) return
+    setSceneUrl(url)
+  }
+
+  const toggleScene = () => {
+    // quick swap between default and env/custom
+    if (sceneUrl === defaultScene && (envScene || localStorage.getItem('splineScene'))) {
+      setSceneUrl(envScene || localStorage.getItem('splineScene') || defaultScene)
+    } else {
+      setSceneUrl(defaultScene)
+    }
+  }
+
+  // Contact form + health check
   const nameRef = useRef(null)
   const emailRef = useRef(null)
   const messageRef = useRef(null)
-  const [status, setStatus] = useState(null) // 'ok' | 'error' | null
+  const [status, setStatus] = useState(null) // {type, message}
   const [loading, setLoading] = useState(false)
+
+  const [emailHealth, setEmailHealth] = useState(null)
+  const [checkingHealth, setCheckingHealth] = useState(false)
+
+  const handleCheckEmail = async () => {
+    const base = import.meta.env.VITE_BACKEND_URL || ''
+    try {
+      setCheckingHealth(true)
+      const res = await fetch(`${base}/api/contact/health`)
+      const data = await res.json()
+      setEmailHealth(data)
+    } catch (e) {
+      setEmailHealth({ error: 'Unable to reach backend health endpoint.' })
+    } finally {
+      setCheckingHealth(false)
+    }
+  }
 
   const handleSend = async () => {
     const name = nameRef.current?.value?.trim()
@@ -53,8 +96,13 @@ export default function App() {
       })
       const data = await res.json()
       if (res.ok && data?.ok) {
-        setStatus({ type: 'ok', message: data.email_dispatched ? 'Message sent!' : 'Message saved. Email will be delivered if configured.' })
-        // clear fields
+        if (data.email_dispatched) {
+          setStatus({ type: 'ok', message: 'Message sent! Check your inbox.' })
+        } else if (data.error === 'SMTP not configured') {
+          setStatus({ type: 'error', message: 'Saved to inbox queue. Email not sent because SMTP is not configured.' })
+        } else {
+          setStatus({ type: 'error', message: 'Saved, but email delivery failed. You can use the mail app fallback below.' })
+        }
         if (nameRef.current) nameRef.current.value = ''
         if (emailRef.current) emailRef.current.value = ''
         if (messageRef.current) messageRef.current.value = ''
@@ -62,7 +110,6 @@ export default function App() {
         throw new Error(data?.error || 'Failed to send')
       }
     } catch (e) {
-      // Fallback to mailto so the user can still reach you
       const subject = `Collaboration request from ${name}`
       const body = [`Name: ${name}`, `Email: ${email}`, '', 'Message:', msg].join('\n')
       const mailto = `mailto:shreyash@certiswift.in?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
@@ -75,10 +122,8 @@ export default function App() {
 
   return (
     <div id="home" className="min-h-screen w-full text-white bg-[radial-gradient(1350px_750px_at_0%_10%,rgba(239,68,68,0.20),transparent),radial-gradient(800px_450px_at_100%_0%,rgba(244,63,94,0.25),transparent),linear-gradient(180deg,#070709_0%,#0A0A0B_100%)]">
-      {/* Subtle noise and glow overlay */}
       <div className="pointer-events-none fixed inset-0 mix-blend-screen opacity-30 [background:radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.10),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.06),transparent_40%)]" />
 
-      {/* Navbar */}
       <header className="fixed top-0 left-0 right-0 z-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mt-4 rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xl shadow-2xl">
@@ -140,12 +185,22 @@ export default function App() {
             </GlassCard>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="order-1 lg:order-2 h-[380px] sm:h-[460px] md:h-[520px] rounded-2xl border border-white/20 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <Spline scene="https://prod.spline.design/41MGRk-UDPKO-l6W/scene.splinecode" style={{ width: '100%', height: '100%' }} />
+          <motion.div initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.7 }} className="order-1 lg:order-2 h-[380px] sm:h-[460px] md:h-[520px] rounded-2xl border border-white/20 bg-white/5 backdrop-blur-xl shadow-2xl overflow-hidden relative">
+            <Spline scene={sceneUrl} style={{ width: '100%', height: '100%' }} />
+
+            {/* Quick swap controls */}
+            <div className="absolute bottom-3 left-3 right-3 flex flex-col sm:flex-row gap-2">
+              <button onClick={toggleScene} className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-xs hover:bg-black/40">
+                <RefreshCw size={14} /> Swap Scene
+              </button>
+              <div className="flex-1 flex items-stretch gap-2">
+                <input value={customScene} onChange={(e) => setCustomScene(e.target.value)} placeholder="Paste Spline scene URL and Apply" className="flex-1 rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-xs placeholder:text-white/60" />
+                <button onClick={applyCustomScene} className="rounded-lg bg-gradient-to-r from-red-500 to-rose-600 px-3 py-2 text-xs font-medium">Apply</button>
+              </div>
+            </div>
           </motion.div>
         </div>
 
-        {/* gradient accents */}
         <div className="pointer-events-none absolute -top-24 left-0 right-0 -z-0">
           <div className="mx-auto h-72 max-w-5xl rounded-full bg-gradient-to-r from-red-500/30 via-rose-500/20 to-amber-500/20 blur-3xl" />
         </div>
@@ -263,15 +318,15 @@ export default function App() {
             <h3 className="text-2xl md:text-3xl font-bold">Skills & Tools</h3>
           </div>
 
-          <GlassCard className="p-6 md:p-8">
-            <div className="flex flex-wrap gap-2 text-sm">
-              {['React', 'Vite', 'Tailwind CSS', 'Framer Motion', 'FastAPI', 'MongoDB', 'TypeScript', 'Node', 'Git', 'Figma'].map((s) => (
-                <span key={s} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-white/90">
-                  {s}
-                </span>
-              ))}
-            </div>
-          </GlassCard>
+        <GlassCard className="p-6 md:p-8">
+          <div className="flex flex-wrap gap-2 text-sm">
+            {['React', 'Vite', 'Tailwind CSS', 'Framer Motion', 'FastAPI', 'MongoDB', 'TypeScript', 'Node', 'Git', 'Figma'].map((s) => (
+              <span key={s} className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-white/90">
+                {s}
+              </span>
+            ))}
+          </div>
+        </GlassCard>
         </div>
       </section>
 
@@ -299,6 +354,22 @@ export default function App() {
                     <span>{status.message}</span>
                   </div>
                 )}
+
+                {/* Email setup checker */}
+                <div className="sm:col-span-2 mt-2 flex flex-col gap-2">
+                  <button onClick={handleCheckEmail} disabled={checkingHealth} className="inline-flex items-center gap-2 self-start rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs hover:bg-white/20">
+                    <Info size={14} /> {checkingHealth ? 'Checking email setup...' : 'Check email setup'}
+                  </button>
+                  {emailHealth && (
+                    <div className="text-xs text-white/80">
+                      <div>SMTP configured: {String(emailHealth.smtp_configured || false)}</div>
+                      {emailHealth.target_email && <div>Target: {emailHealth.target_email}</div>}
+                      {emailHealth.from_email && <div>From: {emailHealth.from_email}</div>}
+                      {emailHealth.mode && <div>Mode: {emailHealth.mode}</div>}
+                      {emailHealth.error && <div className="text-rose-300">{emailHealth.error}</div>}
+                    </div>
+                  )}
+                </div>
               </div>
             </GlassCard>
 
